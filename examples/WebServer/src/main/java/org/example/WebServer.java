@@ -12,52 +12,50 @@ public class WebServer {
     public static void main(String[] args) {
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 8081;
 
-        int queueLength = args.length > 2 ? Integer.parseInt(args[2]) : 50;;
+        int queueLength = args.length > 2 ? Integer.parseInt(args[2]) : 50;
+
+        ThreadSafeQueue queue = new ThreadSafeQueue();
+
+        int maxNumOfThreads = 6;
+        int currNumOfThreads = 0;
+
+        while(currNumOfThreads<maxNumOfThreads){
+            ThreadRunner threadRunner = new ThreadRunner(queue);
+            threadRunner.start();
+            currNumOfThreads++;
+        }
 
         try (ServerSocket serverSocket = new ServerSocket(port, queueLength)) {
             System.out.println("Web Server is starting up, listening at port " + port + ".");
             System.out.println("You can access http://localhost:" + port + " now.");
 
             while (true) {
-                Socket socket = serverSocket.accept();
 
+                // Make the server socket wait for the next client request
+                Socket socket = serverSocket.accept();
                 System.out.println("Got connection!");
 
+                // To read input from the client
                 BufferedReader input = new BufferedReader(
                         new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
-                try {
-                    HttpRequest request = HttpRequest.parse(input);
+                // Get request
+                HttpRequest request = HttpRequest.parse(input);
 
-                    Processor proc = new Processor(socket, request);
+                Input struct = new Input(socket, request);
 
-                    proc.start();
+                queue.add(struct);
 
-                    ThreadPool threadPool = new ThreadPool(5, 15);
-
-                    for(int i=0; i<15; i++) {
-
-                        int taskNo = i;
-                        threadPool.execute( () -> {
-                            String message =
-                                    Thread.currentThread().getName()
-                                            + ": Task " + taskNo ;
-                            System.out.println(message);
-                        });
-                    }
-
-                    threadPool.waitUntilAllTasksFinished();
-                    threadPool.stop();
-                }
-                catch (Exception e) {
-                    e.printStackTrace();
                 }
             }
-        }
+
         catch (IOException ex) {
             ex.printStackTrace();
         }
         finally {
+            for (int i = 0; i < currNumOfThreads; i++) {
+                queue.add(null);
+            }
             System.out.println("Server has been shutdown!");
         }
     }
